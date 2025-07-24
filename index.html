@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>KPI Dashboard</title>
+
+  <!-- TailwindCSS + DaisyUI -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@2.51.5/dist/full.css" rel="stylesheet" />
+  <!-- AOS Animation -->
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet" />
+  <!-- Custom style -->
+  <style>
+    body {
+      background: linear-gradient(to right, #dfe9f3, #ffffff);
+      font-family: 'Segoe UI', sans-serif;
+    }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.6);
+      border-radius: 1rem;
+      backdrop-filter: blur(15px);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+      padding: 1.5rem;
+      transition: transform 0.3s ease;
+    }
+    .glass-card:hover {
+      transform: translateY(-5px) scale(1.02);
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+  <div class="max-w-7xl mx-auto">
+    <h1 class="text-4xl font-bold text-center mb-8" data-aos="fade-down">📊 Modern KPI Dashboard</h1>
+
+
+
+    <!-- Filter Section -->
+    <section class="glass-card mb-6" data-aos="fade-up">
+      <h3 class="text-lg font-bold text-indigo-700 mb-4">กรองข้อมูล (Filters)</h3>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+        <select id="filter-gender" class="form-select w-full p-2 border rounded">
+          <option value="">-- เพศทั้งหมด --</option>
+          <option value="Male">ชาย</option>
+          <option value="Female">หญิง</option>
+        </select>
+        <select id="filter-subscription" class="form-select w-full p-2 border rounded">
+          <option value="">-- การสมัครสมาชิก --</option>
+          <option value="Yes">สมาชิก</option>
+          <option value="No">ไม่เป็นสมาชิก</option>
+        </select>
+        <select id="filter-season" class="form-select w-full p-2 border rounded">
+          <option value="">-- ทุกฤดูกาล --</option>
+          <option value="Spring">Spring</option>
+          <option value="Summer">Summer</option>
+          <option value="Fall">Fall</option>
+          <option value="Winter">Winter</option>
+        </select>
+        <select id="filter-payment" class="form-select w-full p-2 border rounded">
+          <option value="">-- ทุกช่องทางชำระเงิน --</option>
+        </select>
+      </div>
+
+      <h3 class="text-md font-semibold text-indigo-600 mb-2">เปรียบเทียบข้อมูล</h3>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <select id="compare-column" class="form-select p-2 border rounded">
+          <option value="">-- เลือกคอลัมน์ --</option>
+          <option value="Age">Age</option>
+          <option value="Purchase Amount (USD)">Purchase Amount (USD)</option>
+          <option value="Review Rating">Review Rating</option>
+          <option value="Previous Purchases">Previous Purchases</option>
+          <option value="Customer ID">Customer ID</option>
+          <option value="Item Purchased">Item Purchased</option>
+          <option value="Category">Category</option>
+          <option value="Location">Location</option>
+          <option value="Size">Size</option>
+          <option value="Color">Color</option>
+          <option value="Shipping Type">Shipping Type</option>
+          <option value="Discount Applied">Discount Applied</option>
+          <option value="Promo Code Used">Promo Code Used</option>
+          <option value="Frequency of Purchases">Frequency of Purchases</option>
+        </select>
+        <select id="compare-operator" class="form-select p-2 border rounded">
+          <option value="">-- ตัวดำเนินการ --</option>
+          <option value=">">มากกว่า</option>
+          <option value="<">น้อยกว่า</option>
+          <option value="=">เท่ากับ</option>
+          <option value=">=">มากกว่าหรือเท่ากับ</option>
+          <option value="<=">น้อยกว่าหรือเท่ากับ</option>
+        </select>
+        <input id="compare-value" type="text" placeholder="ค่าที่ต้องการเปรียบเทียบ" class="p-2 border rounded w-full" />
+        <button onclick="renderDashboard(applyFilters())" class="btn btn-primary">Apply Compare</button>
+      </div>
+    </section>
+
+    <div id="dashboard-cards" class="grid md:grid-cols-3 gap-6 mb-8" data-aos="fade-up"></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6" data-aos="fade-up">
+      <div class="glass-card">
+        <canvas id="pieChart"></canvas>
+      </div>
+      <div class="glass-card">
+        <canvas id="barChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+  <script>
+    let rawData = [];
+    let pieChart, barChart;
+    AOS.init();
+
+    document.addEventListener('DOMContentLoaded', () => {
+      ['filter-gender','filter-subscription','filter-season','filter-payment'].forEach(id => {
+        document.getElementById(id).addEventListener('change', () => renderDashboard(applyFilters()));
+      });
+
+      fetch('shopping_trends_updated.csv')
+        .then(res => res.text())
+        .then(csv => {
+          Papa.parse(csv, {
+            header: true,
+            skipEmptyLines: true,
+            complete: r => {
+              rawData = r.data;
+              populateDropdown('filter-payment', 'Payment Method');
+              renderDashboard(applyFilters());
+            }
+          });
+        });
+    });
+
+    function toggleTheme() {
+      document.documentElement.classList.toggle('dark');
+      document.body.classList.toggle('bg-gray-900');
+    }
+
+    function populateDropdown(id, key) {
+      const unique = Array.from(new Set(rawData.map(d => d[key]).filter(Boolean))).sort();
+      const sel = document.getElementById(id);
+      unique.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        sel.appendChild(opt);
+      });
+    }
+
+    function applyFilters() {
+      const gender = document.getElementById('filter-gender').value;
+      const subs = document.getElementById('filter-subscription').value;
+      const season = document.getElementById('filter-season').value;
+      const pay = document.getElementById('filter-payment').value;
+      const col = document.getElementById('compare-column').value;
+      const op = document.getElementById('compare-operator').value;
+      const val = document.getElementById('compare-value').value;
+
+      return rawData.filter(d => {
+        const matchGender = !gender || d.Gender === gender;
+        const matchSubs = !subs || d['Subscription Status'] === subs;
+        const matchSeason = !season || d.Season === season;
+        const matchPay = !pay || d['Payment Method'] === pay;
+
+        let matchCompare = true;
+        if (col && op && val !== '') {
+          const cellValue = isNaN(parseFloat(d[col])) ? (d[col] || '').toString().toLowerCase() : parseFloat(d[col]);
+          const compareValue = isNaN(parseFloat(val)) ? val.toLowerCase() : parseFloat(val);
+          switch (op) {
+            case '>': matchCompare = cellValue > compareValue; break;
+            case '<': matchCompare = cellValue < compareValue; break;
+            case '=': matchCompare = cellValue == compareValue; break;
+            case '>=': matchCompare = cellValue >= compareValue; break;
+            case '<=': matchCompare = cellValue <= compareValue; break;
+          }
+        }
+
+        return matchGender && matchSubs && matchSeason && matchPay && matchCompare;
+      });
+    }
+
+    function renderDashboard(data) {
+      const cards = document.getElementById('dashboard-cards');
+      cards.innerHTML = '';
+      const avgPurchase = (data.reduce((s,d)=>s+parseFloat(d['Purchase Amount (USD)']||0),0)/data.length)||0;
+      const avgRating = (data.reduce((s,d)=>s+parseFloat(d['Review Rating']||0),0)/data.length)||0;
+      const promoRate = (data.filter(d=>d['Promo Code Used']==='Yes').length/data.length*100)||0;
+      const repeatRate = (data.filter(d=>parseInt(d['Previous Purchases'])>0).length/data.length*100)||0;
+      const payCount = {};
+      data.forEach(d => payCount[d['Payment Method']] = (payCount[d['Payment Method']]||0)+1);
+      const topPay = Object.entries(payCount).sort((a,b)=>b[1]-a[1])[0]?.[0]||'-';
+
+      [
+        {title:"Average Purchase",value:`$${avgPurchase.toFixed(2)}`,color:'text-green-600'},
+        {title:"Avg Review Rating",value:`${avgRating.toFixed(1)} / 5`,color:'text-yellow-600'},
+        {title:"Promo Usage Rate",value:`${promoRate.toFixed(1)}%`,color:'text-blue-600'},
+        {title:"Repeat Purchase Rate",value:`${repeatRate.toFixed(1)}%`,color:'text-purple-600'},
+        {title:"Top Payment Method",value:topPay,color:'text-gray-700'}
+      ].forEach(kpi=>{
+        const c=document.createElement('div');
+        c.className='glass-card text-center';
+        c.innerHTML=`<h3 class="text-lg font-medium mb-1">${kpi.title}</h3><div class="text-3xl font-bold ${kpi.color}">${kpi.value}</div>`;
+        cards.appendChild(c);
+      });
+
+      updateCharts(data);
+    }
+
+    function updateCharts(data) {
+      const used = data.filter(d=>d['Promo Code Used']==='Yes').length;
+      const not = data.length - used;
+      if(pieChart) pieChart.destroy();
+      pieChart = new Chart(document.getElementById('pieChart'), {
+        type:'doughnut',
+        data:{labels:['Used Promo','No Promo'],datasets:[{data:[used,not],backgroundColor:['#3b82f6','#d1d5db']}]},
+        options:{plugins:{legend:{position:'bottom'}},responsive:true}
+      });
+
+      const payCount = {};
+      data.forEach(d=>payCount[d['Payment Method']] = (payCount[d['Payment Method']]||0)+1);
+      const top5 = Object.entries(payCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      if(barChart) barChart.destroy();
+      barChart = new Chart(document.getElementById('barChart'), {
+        type:'bar',
+        data:{labels:top5.map(e=>e[0]),datasets:[{label:'จำนวนผู้ใช้',data:top5.map(e=>e[1]),backgroundColor:'#10b981'}]},
+        options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}}}
+      });
+    }
+  </script>
+</body>
+</html>
