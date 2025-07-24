@@ -4,13 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>KPI Dashboard</title>
-
-  <!-- TailwindCSS + DaisyUI -->
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/daisyui@2.51.5/dist/full.css" rel="stylesheet" />
-  <!-- AOS Animation -->
   <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet" />
-  <!-- Custom style -->
   <style>
     body {
       background: linear-gradient(to right, #dfe9f3, #ffffff);
@@ -31,9 +27,7 @@
 </head>
 <body class="min-h-screen p-6">
   <div class="max-w-7xl mx-auto">
-    <h1 class="text-4xl font-bold text-center mb-8" data-aos="fade-down">📊 Modern KPI </h1>
-
-
+    <h1 class="text-4xl font-bold text-center mb-8" data-aos="fade-down">📊 Modern KPI Dashboard</h1>
 
     <!-- Filter Section -->
     <section class="glass-card mb-6" data-aos="fade-up">
@@ -65,28 +59,9 @@
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <select id="compare-column" class="form-select p-2 border rounded">
           <option value="">-- เลือกคอลัมน์ --</option>
-          <option value="Age">Age</option>
-          <option value="Purchase Amount (USD)">Purchase Amount (USD)</option>
-          <option value="Review Rating">Review Rating</option>
-          <option value="Previous Purchases">Previous Purchases</option>
-          <option value="Customer ID">Customer ID</option>
-          <option value="Item Purchased">Item Purchased</option>
-          <option value="Category">Category</option>
-          <option value="Location">Location</option>
-          <option value="Size">Size</option>
-          <option value="Color">Color</option>
-          <option value="Shipping Type">Shipping Type</option>
-          <option value="Discount Applied">Discount Applied</option>
-          <option value="Promo Code Used">Promo Code Used</option>
-          <option value="Frequency of Purchases">Frequency of Purchases</option>
         </select>
         <select id="compare-operator" class="form-select p-2 border rounded">
           <option value="">-- ตัวดำเนินการ --</option>
-          <option value=">">มากกว่า</option>
-          <option value="<">น้อยกว่า</option>
-          <option value="=">เท่ากับ</option>
-          <option value=">=">มากกว่าหรือเท่ากับ</option>
-          <option value="<=">น้อยกว่าหรือเท่ากับ</option>
         </select>
         <input id="compare-value" type="text" placeholder="ค่าที่ต้องการเปรียบเทียบ" class="p-2 border rounded w-full" />
         <button onclick="renderDashboard(applyFilters())" class="btn btn-primary">Apply Compare</button>
@@ -109,13 +84,57 @@
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
   <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
   <script>
+    AOS.init();
+
+    const columnTypes = {
+      "Age": "number",
+      "Purchase Amount (USD)": "number",
+      "Review Rating": "number",
+      "Previous Purchases": "number",
+      "Customer ID": "text",
+      "Item Purchased": "text",
+      "Category": "text",
+      "Location": "text",
+      "Size": "text",
+      "Color": "text",
+      "Shipping Type": "text",
+      "Discount Applied": "boolean",
+      "Promo Code Used": "boolean",
+      "Frequency of Purchases": "text",
+      "Subscription Status": "boolean",
+      "Gender": "text",
+      "Season": "text",
+      "Payment Method": "text"
+    };
+
     let rawData = [];
     let pieChart, barChart;
-    AOS.init();
 
     document.addEventListener('DOMContentLoaded', () => {
       ['filter-gender','filter-subscription','filter-season','filter-payment'].forEach(id => {
         document.getElementById(id).addEventListener('change', () => renderDashboard(applyFilters()));
+      });
+
+      document.getElementById('compare-column').addEventListener('change', e => {
+        const col = e.target.value;
+        const type = columnTypes[col];
+        const opSelect = document.getElementById('compare-operator');
+        opSelect.innerHTML = '';
+
+        const operators = {
+          number: ['>', '<', '=', '>=', '<='],
+          text: ['=', 'contains'],
+          boolean: ['=']
+        };
+
+        if (type && operators[type]) {
+          operators[type].forEach(op => {
+            const opt = document.createElement('option');
+            opt.value = op;
+            opt.textContent = op === 'contains' ? 'contains (มีคำนี้)' : op;
+            opSelect.appendChild(opt);
+          });
+        }
       });
 
       fetch('shopping_trends_updated.csv')
@@ -127,15 +146,21 @@
             complete: r => {
               rawData = r.data;
               populateDropdown('filter-payment', 'Payment Method');
+              populateColumnSelect();
               renderDashboard(applyFilters());
             }
           });
         });
     });
 
-    function toggleTheme() {
-      document.documentElement.classList.toggle('dark');
-      document.body.classList.toggle('bg-gray-900');
+    function populateColumnSelect() {
+      const sel = document.getElementById('compare-column');
+      Object.keys(columnTypes).forEach(key => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = key;
+        sel.appendChild(opt);
+      });
     }
 
     function populateDropdown(id, key) {
@@ -143,7 +168,8 @@
       const sel = document.getElementById(id);
       unique.forEach(v => {
         const opt = document.createElement('option');
-        opt.value = v; opt.textContent = v;
+        opt.value = v;
+        opt.textContent = v;
         sel.appendChild(opt);
       });
     }
@@ -165,14 +191,25 @@
 
         let matchCompare = true;
         if (col && op && val !== '') {
-          const cellValue = isNaN(parseFloat(d[col])) ? (d[col] || '').toString().toLowerCase() : parseFloat(d[col]);
-          const compareValue = isNaN(parseFloat(val)) ? val.toLowerCase() : parseFloat(val);
-          switch (op) {
-            case '>': matchCompare = cellValue > compareValue; break;
-            case '<': matchCompare = cellValue < compareValue; break;
-            case '=': matchCompare = cellValue == compareValue; break;
-            case '>=': matchCompare = cellValue >= compareValue; break;
-            case '<=': matchCompare = cellValue <= compareValue; break;
+          const type = columnTypes[col];
+          let cellValue = d[col];
+
+          if (type === 'number') {
+            cellValue = parseFloat(cellValue);
+            const compareValue = parseFloat(val);
+            switch (op) {
+              case '>': matchCompare = cellValue > compareValue; break;
+              case '<': matchCompare = cellValue < compareValue; break;
+              case '=': matchCompare = cellValue === compareValue; break;
+              case '>=': matchCompare = cellValue >= compareValue; break;
+              case '<=': matchCompare = cellValue <= compareValue; break;
+            }
+          } else if (type === 'text') {
+            cellValue = (cellValue || '').toLowerCase();
+            const compareValue = val.toLowerCase();
+            matchCompare = op === '=' ? cellValue === compareValue : cellValue.includes(compareValue);
+          } else if (type === 'boolean') {
+            matchCompare = cellValue.toLowerCase() === val.toLowerCase();
           }
         }
 
